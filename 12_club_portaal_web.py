@@ -8,6 +8,8 @@ BASIS_MAP = os.path.dirname(os.path.abspath(__file__))
 SPELERS_JSON = os.path.join(BASIS_MAP, "btlb_spelers.json")
 EVENTS_CSV = os.path.join(BASIS_MAP, "seizoen_events_btlb.csv")
 TRAINING_CSV = os.path.join(BASIS_MAP, "training_historiek.csv")
+LOGIN_LOG_CSV = os.path.join(BASIS_MAP, "login_log.csv")
+import urllib.request, base64
 CONFIG_JSON = os.path.join(BASIS_MAP, "portaal_config.json")
 
 st.set_page_config(page_title="BTLB Club- & Spelersportaal", page_icon="⚽", layout="wide")
@@ -78,6 +80,41 @@ def sla_config_op(cfg):
     try:
         with open(CONFIG_JSON, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=4, ensure_ascii=False)
+    except Exception:
+        pass
+def registreer_login(speler_naam, ploeg_naam):
+    nu_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    bestaat = os.path.exists(LOGIN_LOG_CSV)
+    try:
+        with open(LOGIN_LOG_CSV, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["Tijdstip", "Speler", "Ploeg"])
+            if not bestaat:
+                w.writeheader()
+            w.writerow({"Tijdstip": nu_str, "Speler": speler_naam, "Ploeg": ploeg_naam})
+    except Exception:
+        pass
+
+    # Bewaar login_log.csv ook direct op GitHub indien ingesteld in Streamlit Secrets
+    try:
+        gh_tok = st.secrets.get("GITHUB_TOKEN", "")
+        gh_repo = st.secrets.get("GITHUB_REPO", "wullaert-tafelvoetbal/tafelvoetbal-clubportaal")
+        if gh_tok and os.path.exists(LOGIN_LOG_CSV):
+            domein = "api." + "github" + ".com"
+            api_url = f"https://{domein}/repos/{gh_repo}/contents/login_log.csv"
+            hdrs = {"Authorization": f"Bearer {gh_tok}", "Accept": "application/vnd.github+json", "User-Agent": "BTLB-Portaal"}
+            sha = None
+            try:
+                with urllib.request.urlopen(urllib.request.Request(api_url, headers=hdrs), timeout=8) as r:
+                    sha = json.loads(r.read().decode("utf-8")).get("sha")
+            except Exception:
+                pass
+            with open(LOGIN_LOG_CSV, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            body = {"message": f"Login log: {speler_naam}", "content": b64}
+            if sha:
+                body["sha"] = sha
+            req = urllib.request.Request(api_url, data=json.dumps(body).encode("utf-8"), headers=hdrs, method="PUT")
+            urllib.request.urlopen(req, timeout=8)
     except Exception:
         pass
 
@@ -183,6 +220,7 @@ if not st.session_state["ingelogde_speler"]:
             if pin_input == juiste_pin:
                 st.session_state["ingelogde_speler"] = gekozen_user
                 st.session_state["is_admin"] = False
+                registreer_login(gekozen_user, config["actieve_ploeg"])
                 st.rerun()
             else:
                 st.error("Onjuiste pincode. Vraag je pincode aan je kapitein (standaard: 1234).")
@@ -368,3 +406,27 @@ with tab4:
             config["pincodes"] = nieuwe_pins
             sla_config_op(config)
             st.success(f"Instellingen opgeslagen! Het portaal staat nu ingesteld op **{nieuwe_ploeg}**.")
+            st.markdown("---")
+        st.subheader("👀 Inlogstatistieken & Activiteit van Spelers")
+        if os.path.exists(LOGIN_LOG_CSV):
+            with open(LOGIN_LOG_CSV, "r", encoding="utf-8") as f:
+                log_rijen = list(csv.DictReader(f))
+            if log_rijen:
+                tellingen = {}
+                laatste_keer = {}
+                for r in log_rijen:
+                    sp = r.get("Speler", "Onbekend")
+                    tellingen[sp] = tellingen.get(sp, 0) + 1
+                    laatste_keer[sp] = r.get("Tijdstip", "")
+
+                overzicht = [
+                    {"Speler": sp, "Aantal Logins": cnt, "Laatst Ingelogd": laatste_keer.get(sp, "")}
+                    for sp, cnt in sorted(tellingen.items(), key=lambda x: x[1], reverse=True)
+                ]
+                st.dataframe(overzicht, use_container_width=True)
+                with st.expander("Bekijk laatste 25 losse logins chronologisch"):
+                    st.dataframe(list(reversed(log_rijen[-25:])), use_container_width=True)
+            else:
+                st.info("Er heeft nog niemand ingelogd sinds de start van het logboek.")
+        else:
+            st.info("Zodra de eerste speler inlogt, verschijnt hier automatisch het overzicht per speler.")
