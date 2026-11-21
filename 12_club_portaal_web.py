@@ -262,15 +262,27 @@ with tab1:
 # --- TAB 2: TEGENSTANDER SCOUTEN ---
 with tab2:
     st.subheader("⚔️ Tegenstander Scouting & Strijdplan")
-    alle_tegenstanders = sorted({(e.get("Speler") or "").strip() for e in alle_events if (e.get("Speler") or "").strip()})
-    if not alle_tegenstanders:
-        st.info("Zodra de eerste wedstrijden onder de 200fps camera zijn gespeeld, kun je hier elke tegenstander opzoeken.")
+    c_t1, c_t2 = st.columns(2)
+    alle_reeksen = list(btlb_data.keys())
+    idx_tr = alle_reeksen.index(config["actieve_reeks"]) if config["actieve_reeks"] in alle_reeksen else 0
+    t_reeks = c_t1.selectbox("Kies Reeks van tegenstander:", alle_reeksen, index=idx_tr)
+
+    ploegen_in_reeks = sorted(list(btlb_data.get(t_reeks, {}).keys()))
+    t_ploeg = c_t2.selectbox("Kies Ploeg:", ploegen_in_reeks)
+
+    spelers_in_ploeg = btlb_data.get(t_reeks, {}).get(t_ploeg, [])
+    if not spelers_in_ploeg:
+        st.info("Geen spelers gevonden in deze ploeg.")
     else:
-        gekozen_tegen = st.selectbox("Kies een tegenstander:", alle_tegenstanders)
+        gekozen_tegen = st.selectbox("Kies Speler om te scouten:", spelers_in_ploeg)
         t_info = analyseer_speler_data(gekozen_tegen, alle_events)
-        st.write(f"**Geanalyseerde acties:** {t_info['acties']}")
-        st.error(f"🚨 **Verdediging:** Dek vooral **{t_info['fav_var']}** richting **{t_info['fav_hoek']}** af (Killer-schot: {t_info['killer']}).")
-        st.success(f"🎯 **Aanval:** Mik tegen zijn verdediging op zone **{t_info['zwakste_zone']}**.")
+
+        st.markdown(f"**BTLB Profiel:** `{gekozen_tegen}`  |  **200fps Camera-acties:** `{t_info['acties']}`")
+        if t_info["acties"] == 0:
+            st.info("ℹ️ Nog geen eigen 200fps camera-beelden van deze speler. Zodra jullie tegen deze ploeg spelen onder de camera, verschijnen hier automatisch zijn dodelijkste schot en open doelzone!")
+        else:
+            st.error(f"🚨 **Verdediging:** Dek vooral **{t_info['fav_var']}** richting **{t_info['fav_hoek']}** af (Killer-schot: {t_info['killer']}).")
+            st.success(f"🎯 **Aanval:** Mik tegen zijn verdediging op zone **{t_info['zwakste_zone']}**.")
 
 # --- TAB 3: PERSOONLIJK TRAININGSSCHEMA & JAARPROGRESSIE ---
 with tab3:
