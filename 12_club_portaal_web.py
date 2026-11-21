@@ -323,9 +323,9 @@ with tab3:
 
 # --- TAB 4: CLUBWISSEL & PINCODE BEHEER ---
 with tab4:
-    st.subheader("⚙️ Club-instellingen (Volgend seizoen eenvoudig wisselen van club)")
+    st.subheader("🔐 Mijn Persoonlijke Pincode")
     if not st.session_state["is_admin"]:
-        st.info("Log in als **⚙️ Clubbeheer / Kapitein** (standaard pincode: `9999`) om van club te wisselen of pincodes van spelers te beheren.")
+        st.info("Hier kun je jouw eigen persoonlijke pincode aanpassen. (Clubinstellingen zijn alleen zichtbaar voor de kapitein/beheerder.)")
         if not st.session_state["is_admin"] and st.session_state["ingelogde_speler"]:
             nieuwe_pin = st.text_input("Eigen nieuwe 4-cijferige pincode instellen:", max_chars=6)
             if st.button("Mijn pincode wijzigen") and len(nieuwe_pin) >= 4:
