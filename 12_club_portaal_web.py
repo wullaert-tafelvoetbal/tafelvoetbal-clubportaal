@@ -10,6 +10,8 @@ EVENTS_CSV = os.path.join(BASIS_MAP, "seizoen_events_btlb.csv")
 TRAINING_CSV = os.path.join(BASIS_MAP, "training_historiek.csv")
 LOGIN_LOG_CSV = os.path.join(BASIS_MAP, "login_log.csv")
 import urllib.request, base64
+import streamlit.components.v1 as components
+
 CONFIG_JSON = os.path.join(BASIS_MAP, "portaal_config.json")
 
 st.set_page_config(page_title="BTLB Club- & Spelersportaal", page_icon="⚽", layout="wide")
@@ -370,6 +372,113 @@ with tab3:
         if hist:
             st.subheader("📈 Jouw Jaar- & Seizoensprogressie")
             st.dataframe(list(reversed(hist)), use_container_width=True)
+        st.markdown("---")
+    st.subheader("⚡ Thuis Reactie- & Geluidstrainer (3-Stang & Pass 5 → 3)")
+    st.info("ℹ️ **Thuis-modus (alleen geluidssignaal):** Oefen je reactie op het onvoorspelbare piepje (3–15 sec). Voor automatische analyse van reactietijd (ms), juistheid en balsnelheid (km/u) train je op de clubtafel onder de 200fps camera.")
+
+    alle_drills = [
+        "3-stang: Frontpin Schot",
+        "3-stang: Backpin Schot",
+        "3-stang: Pull Shot (Trek Kort / Midden / Lang)",
+        "3-stang: Push Shot (Duw Kort / Midden / Lang)",
+        "3-stang: Schijn Trek -> Duw",
+        "3-stang: Schijn Duw -> Trek",
+        "3-stang: Snake / Jet (Rond de bal draaien)",
+        "3-stang: Tic-Tac Schot op doel",
+        "Pass 5 -> 3: Langs de band (Muur)",
+        "Pass 5 -> 3: Rechtdoor",
+        "Pass 5 -> 3: Schuin / Diagonaal",
+        "Pass 5 -> 3: Tic-Tac Opbouw"
+    ]
+    gekozen_drills = st.multiselect(
+        "Kies welke 3-stang schoten & Pass 5 → 3 je wilt oefenen:",
+        alle_drills,
+        default=["3-stang: Pull Shot (Trek Kort / Midden / Lang)", "3-stang: Push Shot (Duw Kort / Midden / Lang)", "Pass 5 -> 3: Langs de band (Muur)"]
+    )
+    c_r1, c_r2 = st.columns(2)
+    aantal_pogingen = c_r1.number_input("Aantal herhalingen:", min_value=5, max_value=50, value=15, step=5)
+    terugleg_sec = c_r2.number_input("Bal terugleggen (seconden):", min_value=2, max_value=10, value=4, step=1)
+
+    if gekozen_drills:
+        drills_json = json.dumps(gekozen_drills)
+        html_trainer = f"""
+        <div style="background:#0f172a;border:2px solid #334155;border-radius:12px;padding:18px;color:white;font-family:sans-serif;text-align:center;">
+          <div id="teller" style="color:#94a3b8;font-weight:bold;font-size:14px;">Klaar voor {aantal_pogingen} pogingen</div>
+          <div id="doel" style="color:#fde047;font-weight:bold;font-size:22px;margin:10px 0;">Druk op START om te beginnen</div>
+          <div id="status" style="color:#38bdf8;font-weight:bold;font-size:18px;margin-bottom:14px;">🔔 Lage tik = timer loopt (3-15s) | Hoge piep = NU UITVOEREN!</div>
+          <button onclick="startTrainer()" style="background:#16a34a;color:white;border:none;padding:12px 24px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:8px;">▶️ START GELUIDSTRAINER</button>
+          <button onclick="stopTrainer()" style="background:#dc2626;color:white;border:none;padding:12px 20px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;">⏹️ STOP</button>
+        </div>
+        <script>
+          const drills = {drills_json};
+          const maxPog = {int(aantal_pogingen)};
+          const terugMs = {int(terugleg_sec) * 1000};
+          let actief = false, pog = 0, t1 = null, t2 = null, audioCtx = null;
+
+          function piep(freq, duur) {{
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.value = 0.25;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            setTimeout(() => osc.stop(), duur);
+          }}
+
+          function volgende() {{
+            if (!actief) return;
+            if (pog >= maxPog) {{
+              actief = false;
+              document.getElementById('doel').innerText = "✅ SESSIE VOLTOOID!";
+              document.getElementById('status').innerText = "Alle " + maxPog + " pogingen afgewerkt.";
+              document.getElementById('status').style.color = "#4ade80";
+              return;
+            }}
+            pog++;
+            const gekozen = drills[Math.floor(Math.random() * drills.length)];
+            document.getElementById('teller').innerText = "Poging " + pog + " van " + maxPog;
+            document.getElementById('doel').innerText = "DOEL: " + gekozen;
+            document.getElementById('status').innerText = "🔄 Leg de bal klaar onder de 3- of 5-stang (" + (terugMs/1000) + "s)...";
+            document.getElementById('status').style.color = "#38bdf8";
+
+            t1 = setTimeout(() => {{
+              if (!actief) return;
+              piep(600, 100);
+              document.getElementById('status').innerText = "🔇 Timer loopt (3-15s)... focus op het piepje!";
+              document.getElementById('status').style.color = "#cbd5e1";
+              const wacht = 3000 + Math.floor(Math.random() * 12000);
+              t2 = setTimeout(() => {{
+                if (!actief) return;
+                piep(1400, 240);
+                document.getElementById('status').innerText = "🔊 BEEP! NU UITVOEREN!";
+                document.getElementById('status').style.color = "#4ade80";
+                setTimeout(volgende, 1800);
+              }}, wacht);
+            }}, terugMs);
+          }}
+
+          function startTrainer() {{
+            stopTrainer();
+            actief = true;
+            pog = 0;
+            piep(600, 60);
+            volgende();
+          }}
+
+          function stopTrainer() {{
+            actief = false;
+            clearTimeout(t1);
+            clearTimeout(t2);
+            document.getElementById('status').innerText = "Gestopt.";
+          }}
+        </script>
+        """
+        components.html(html_trainer, height=230)
+
 
 # --- TAB 4: CLUBWISSEL & PINCODE BEHEER ---
 with tab4:
